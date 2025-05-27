@@ -51,6 +51,11 @@ class ServerSettings
     enum ushort maxRequestSize = 1024 + "\r\n".length;
 
     TLSContext tlsContext;
+
+    this(TLSContext tlsContext)
+    {
+		this.tlsContext = tlsContext;
+	}
 }
 
 ///
@@ -99,6 +104,8 @@ class GeminiListener
     {
         scope(exit) connection.close();
 
+        assert(serverSettings.tlsContext, "No TLS context found");
+
         connection.tcpNoDelay = true;
 
         alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
@@ -112,6 +119,8 @@ class GeminiListener
             logDebug("Client didn't send the initial request in a timely manner");
             return;
         }
+
+		logDebug("Accept TLS connection: %s", serverSettings.tlsContext.kind);
     }
 }
 
@@ -127,7 +136,12 @@ void main()
 {
     import std.stdio;
 
-    const cfg = new ServerSettings;
-    auto listener = listenGemini(cfg, () @safe => null);
+    const ss = new ServerSettings(
+		tlsContext: createTLSContext(TLSContextKind.server)
+	);
+    //~ ss.tlsContext.useCertificateChainFile(cfg.pkiCertFile);
+    //~ ss.tlsContext.usePrivateKeyFile(cfg.pkiKeyFile);
+
+    auto listener = listenGemini(ss, () @safe => null);
     //~ writeln("Edit source/app.d to start your project.");
 }
