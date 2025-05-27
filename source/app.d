@@ -94,22 +94,25 @@ class GeminiListener
 
     static void handleConnectionNoThrow(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext) nothrow @safe
     {
+        scope(exit) conn.close();
+
         assert(tlsContext, "No TLS context passed");
 
-        try handleConnection(conn, serverSettings, tlsContext);
-        catch (Exception e) {
+        try handleTlsConnection(conn, serverSettings, tlsContext);
+        catch(Exception e)
+        {
             logError("Connection handler has thrown at the peer %s: %s", conn.remoteAddress, e.msg);
             debug logDebug("Full error: %s", () @trusted { return e.toString().sanitize(); } ());
 
             try conn.close();
-            catch (Exception e) logError("Failed to close connection: %s", e.msg);
+            catch(Exception e) logError("Failed to close connection: %s", e.msg);
         }
     }
 
-    static void handleConnection(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext) @safe
-    {
-        scope(exit) conn.close();
+    alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
 
+    static void handleTlsConnection(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext) @safe
+    {
         conn.tcpNoDelay = true;
 
         InterfaceProxy!Stream stream;
@@ -123,8 +126,15 @@ class GeminiListener
 
         logTrace("Accept TLS conn: %s", tlsContext.kind);
 
-        alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
         TLSStreamType tls_stream = createTLSStreamFL(stream, tlsContext, TLSStreamState.accepting, null, conn.remoteAddress);
+
+        logTrace("Accept TLS conn from %s", conn.remoteAddress.toString);
+
+        handleGeminiConnection(conn, tls_stream, serverSettings);
+    }
+
+    static void handleGeminiConnection(TCPConnection conn, TLSStreamType tls_stream, in ServerSettings serverSettings) @safe
+    {
     }
 }
 
