@@ -3,6 +3,7 @@ import std.traits;
 import vibe.core.core: runEventLoop;
 import vibe.core.log;
 import vibe.core.net;
+import vibe.inet.url: URL;
 import vibe.internal.interfaceproxy;
 import vibe.stream.operations;
 import vibe.stream.tls;
@@ -134,7 +135,8 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
     string req;
 
     try () @trusted {
-        req = cast(string) stream.readUntil(cast(ubyte[]) "\r\n", serverSettings.maxRequestSize);
+        immutable eol = cast(immutable ubyte[]) "\r\n";
+        req = cast(string) stream.readUntil(eol, serverSettings.maxRequestSize);
 
         //TODO: is stream empty check?
     }();
@@ -146,7 +148,7 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
         // Tested on OpenSSL only
         if(e.msg.canFind(`11 (Resource temporarily unavailable)`))
         {
-            logTrace("socket closed by remote peer");
+            logTrace("Socket closed by remote peer");
             return;
         }
         else
@@ -154,6 +156,24 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
     }
 
     logTrace("Request: %s", req);
+
+    auto sr = new GeminiServerRequest(serverSettings);
+    sr.clientAddress = conn.remoteAddress;
+    sr.url = URL(req);
+
+    //~ dg(sr);
+}
+
+class GeminiServerRequest
+{
+    const ServerSettings* m_settings;
+    NetworkAddress clientAddress;
+    URL url;
+
+    this(const ref ServerSettings serverSettings) @trusted
+    {
+        m_settings = &serverSettings;
+    }
 }
 
 ///
