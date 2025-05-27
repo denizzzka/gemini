@@ -2,6 +2,7 @@ import std.datetime;
 import std.traits;
 import vibe.core.core: runEventLoop;
 import vibe.core.log;
+import vibe.core.net;
 import vibe.internal.interfaceproxy;
 import vibe.stream.operations;
 import vibe.stream.tls;
@@ -61,10 +62,7 @@ struct ServerSettings
 ///
 class GeminiListener
 {
-    import vibe.core.net;
-    import std.encoding : sanitize;
-
-    //~ static assert(!HaveNoTLS);
+    import std.encoding: sanitize;
 
     TCPListener[] listeners;
 
@@ -109,14 +107,13 @@ class GeminiListener
         }
     }
 
-    alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
-
     static void handleTlsConnection(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext) @safe
     {
         conn.tcpNoDelay = true;
 
-        InterfaceProxy!Stream stream;
-        stream = conn;
+        logTrace("Accept TLS conn from %s", conn.remoteAddress.toString);
+
+        InterfaceProxy!Stream stream = conn;
 
         if(!conn.waitForData(serverSettings.preTlsTimeout.msecs))
         {
@@ -124,18 +121,39 @@ class GeminiListener
             return;
         }
 
-        logTrace("Accept TLS conn: %s", tlsContext.kind);
-
         TLSStreamType tls_stream = createTLSStreamFL(stream, tlsContext, TLSStreamState.accepting, null, conn.remoteAddress);
-
-        logTrace("Accept TLS conn from %s", conn.remoteAddress.toString);
 
         handleGeminiConnection(conn, tls_stream, serverSettings);
     }
+}
 
-    static void handleGeminiConnection(TCPConnection conn, TLSStreamType tls_stream, in ServerSettings serverSettings) @safe
+alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
+
+private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings) @safe
+{
+    string req;
+
+    try () @trusted {
+        req = cast(string) stream.readUntil(cast(ubyte[]) "\r\n", serverSettings.maxRequestSize);
+
+        //TODO: is stream empty check?
+    }();
+    catch(Exception e)
     {
+        //TODO: check SSL code, not error message
+        import std.algorithm.searching;
+
+        // Tested on OpenSSL only
+        if(e.msg.canFind(`11 (Resource temporarily unavailable)`))
+        {
+            logTrace("socket closed by remote peer");
+            return;
+        }
+        else
+            throw e;
     }
+
+    logTrace("Request: %s", req);
 }
 
 ///
@@ -152,13 +170,16 @@ void main()
 
     enum debugEnabled = true;
     if(debugEnabled)
-        setLogLevel = LogLevel.debugV;
+        //~ setLogLevel = LogLevel.debugV;
+        setLogLevel = LogLevel.trace;
     else
         setLogLevel = LogLevel.diagnostic;
 
     const ss = ServerSettings(
         pkiCertFile: "cert.pem",
         pkiPrivateKeyFile: "privkey.pem",
+        reuseAddress: true,
+        reusePort: true,
     );
 
     auto listener = listenGemini(ss, () @safe => null);
