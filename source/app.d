@@ -1,5 +1,8 @@
 import std.datetime;
+import std.traits;
 import vibe.core.log;
+import vibe.internal.interfaceproxy;
+import vibe.stream.operations;
 import vibe.stream.tls;
 
 ///
@@ -92,8 +95,23 @@ class GeminiListener
         }
     }
 
-    static void handleConnection(in TCPConnection connection, in ServerSettings serverSettings) @safe
+    static void handleConnection(TCPConnection connection, in ServerSettings serverSettings) @safe
     {
+        scope(exit) connection.close();
+
+        connection.tcpNoDelay = true;
+
+        alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
+        TLSStreamType tls_stream;
+
+        InterfaceProxy!Stream stream;
+        stream = connection;
+
+        if(!connection.waitForData(serverSettings.preTlsTimeout.msecs))
+        {
+            logDebug("Client didn't send the initial request in a timely manner");
+            return;
+        }
     }
 }
 
