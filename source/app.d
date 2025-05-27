@@ -9,11 +9,43 @@ import vibe.stream.operations;
 import vibe.stream.tls;
 
 ///
-alias GeminiServerRequestHandler = GeminiServerResponse delegate(GeminiServerRequest) @safe;
+alias GeminiServerRequestHandler = void delegate(GeminiServerRequest, ref GeminiServerResponse) @safe;
+
+///
+enum ReplyCode : ubyte
+{
+    input = 1,
+    success,
+    redirect,
+    tempfail,
+    permfail,
+    auth,
+}
 
 ///
 class GeminiServerResponse
 {
+    ReplyCode replyCode = ReplyCode.permfail;
+    ubyte additionalCode;
+
+    union
+    {
+        string prompt;
+        union
+        {
+            string mimetype;
+            ubyte[] body;
+
+            ///
+            void writeBody(string s, string content_type)
+            {
+                mimetype = content_type;
+                body = cast(ubyte[]) s;
+            }
+        }
+        string redirectUri;
+        string errormsg;
+    }
 }
 
 ///
@@ -161,7 +193,8 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
     sr.clientAddress = conn.remoteAddress;
     sr.url = URL(req);
 
-    dg(sr);
+    auto resp = new GeminiServerResponse;
+    dg(sr, resp);
 }
 
 class GeminiServerRequest
@@ -202,13 +235,14 @@ void main()
         reusePort: true,
     );
 
-    GeminiServerResponse handler(GeminiServerRequest req) @trusted
+    void handler(GeminiServerRequest req, ref GeminiServerResponse res) @trusted
     {
         import std.conv;
 
         logTrace(req.url.to!string);
 
-        return null;
+        res.replyCode = ReplyCode.success;
+        res.writeBody(`Hello, world!`, "text/gemini");
     }
 
     auto listener = listenGemini(ss, &handler);
