@@ -15,7 +15,7 @@ class GeminiServerResponse
 }
 
 ///
-class ServerSettings
+struct ServerSettings
 {
     /// The interfaces on which the HTTP server is listening.
     ///
@@ -50,6 +50,12 @@ class ServerSettings
     // Spec: URI MUST NOT exceed 1024 bytes, and a server MUST reject requests where the URI exceeds this limit
     // absolute-URI + CRLF length
     enum ushort maxRequestSize = 1024 + "\r\n".length;
+
+    ///
+    string pkiCertFile;
+
+    ///
+    string pkiPrivateKeyFile;
 }
 
 ///
@@ -75,6 +81,8 @@ class GeminiListener
     static TCPListener createListener(in ServerSettings serverSettings, TCPListenOptions options, string addr) @safe
     {
         auto tlsContext = createTLSContext(TLSContextKind.server);
+        tlsContext.useCertificateChainFile(serverSettings.pkiCertFile);
+        tlsContext.usePrivateKeyFile(serverSettings.pkiPrivateKeyFile);
 
         return listenTCP(
             serverSettings.port,
@@ -138,9 +146,10 @@ void main()
     else
         setLogLevel = LogLevel.diagnostic;
 
-    const ss = new ServerSettings;
-    //~ ss.tlsContext.useCertificateChainFile(cfg.pkiCertFile);
-    //~ ss.tlsContext.usePrivateKeyFile(cfg.pkiKeyFile);
+    const ss = ServerSettings(
+        pkiCertFile: "cert.pem",
+        pkiPrivateKeyFile: "privkey.pem",
+    );
 
     auto listener = listenGemini(ss, () @safe => null);
     writeln("Gemini server listening");
