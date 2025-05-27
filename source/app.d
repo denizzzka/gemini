@@ -1,4 +1,6 @@
+import std.datetime;
 import vibe.core.log;
+import vibe.stream.tls;
 
 ///
 alias GeminiServerRequestDelegate = GeminiServerResponse delegate(/*GeminiServerRequest req*/) @safe;
@@ -31,16 +33,21 @@ class ServerSettings
     bool reusePort;
 
     //TODO: set defaults same as in other servers
-    /// Time to wait for socket connection & TLS handshake
-    uint connectTimeout = 60 * 1000; // 60s
+    /// Time to wait for socket connection
+    uint preTlsTimeout = 10 * 1000; // 10s
+
+    /// Time to wait for TLS handshake
+    uint tlsTimeout = 60 * 1000; // 60s
 
     /// Time until full request is received
-    uint requestTimeout = 40 * 1000; // 40s
+    //~ uint requestTimeout = 40 * 1000; // 40s
 
     /// Maximum number of transferred bytes per request after which the connection is closed with an error
     // Spec: URI MUST NOT exceed 1024 bytes, and a server MUST reject requests where the URI exceeds this limit
-    // absolute-URI + CRLF length is 1026
-    enum ushort maxRequestSize = 1026;
+    // absolute-URI + CRLF length
+    enum ushort maxRequestSize = 1024 + "\r\n".length;
+
+    TLSContext tlsContext;
 }
 
 ///
@@ -73,7 +80,7 @@ class GeminiListener
         );
     }
 
-    static handleConnectionNoThrow(TCPConnection conn, in ServerSettings serverSettings) nothrow @safe
+    static void handleConnectionNoThrow(TCPConnection conn, in ServerSettings serverSettings) nothrow @safe
     {
         try handleConnection(conn, serverSettings);
         catch (Exception e) {
@@ -85,7 +92,7 @@ class GeminiListener
         }
     }
 
-    static handleConnection(in TCPConnection connection, in ServerSettings serverSettings) @safe
+    static void handleConnection(in TCPConnection connection, in ServerSettings serverSettings) @safe
     {
     }
 }
