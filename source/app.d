@@ -50,13 +50,6 @@ class ServerSettings
     // Spec: URI MUST NOT exceed 1024 bytes, and a server MUST reject requests where the URI exceeds this limit
     // absolute-URI + CRLF length
     enum ushort maxRequestSize = 1024 + "\r\n".length;
-
-    TLSContext tlsContext;
-
-    this(TLSContext tlsContext)
-    {
-		this.tlsContext = tlsContext;
-	}
 }
 
 ///
@@ -81,17 +74,21 @@ class GeminiListener
 
     static TCPListener createListener(in ServerSettings serverSettings, TCPListenOptions options, string addr) @safe
     {
+        auto tlsContext = createTLSContext(TLSContextKind.server);
+
         return listenTCP(
             serverSettings.port,
-            (TCPConnection conn) nothrow @safe => handleConnectionNoThrow(conn, serverSettings),
+            (TCPConnection conn) nothrow @safe => handleConnectionNoThrow(conn, serverSettings, tlsContext),
             addr,
             options
         );
     }
 
-    static void handleConnectionNoThrow(TCPConnection conn, in ServerSettings serverSettings) nothrow @safe
+    static void handleConnectionNoThrow(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext) nothrow @safe
     {
-        try handleConnection(conn, serverSettings);
+        assert(tlsContext, "No TLS context passed");
+
+        try handleConnection(conn, serverSettings, tlsContext);
         catch (Exception e) {
             logError("Connection handler has thrown at the peer %s: %s", conn.remoteAddress, e.msg);
             debug logDebug("Full error: %s", () @trusted { return e.toString().sanitize(); } ());
@@ -101,27 +98,25 @@ class GeminiListener
         }
     }
 
-    static void handleConnection(TCPConnection connection, in ServerSettings serverSettings) @safe
+    static void handleConnection(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext) @safe
     {
-        scope(exit) connection.close();
+        scope(exit) conn.close();
 
-        assert(serverSettings.tlsContext, "No TLS context found");
-
-        connection.tcpNoDelay = true;
-
-        alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
-        TLSStreamType tls_stream;
+        conn.tcpNoDelay = true;
 
         InterfaceProxy!Stream stream;
-        stream = connection;
+        stream = conn;
 
-        if(!connection.waitForData(serverSettings.preTlsTimeout.msecs))
+        if(!conn.waitForData(serverSettings.preTlsTimeout.msecs))
         {
             logDebug("Client didn't send the initial request in a timely manner");
             return;
         }
 
-		logDebug("Accept TLS connection: %s", serverSettings.tlsContext.kind);
+        logTrace("Accept TLS conn: %s", tlsContext.kind);
+
+        alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
+        TLSStreamType tls_stream = createTLSStreamFL(stream, tlsContext, TLSStreamState.accepting, null, conn.remoteAddress);
     }
 }
 
@@ -143,9 +138,7 @@ void main()
     else
         setLogLevel = LogLevel.diagnostic;
 
-    const ss = new ServerSettings(
-		tlsContext: createTLSContext(TLSContextKind.server)
-	);
+    const ss = new ServerSettings;
     //~ ss.tlsContext.useCertificateChainFile(cfg.pkiCertFile);
     //~ ss.tlsContext.usePrivateKeyFile(cfg.pkiKeyFile);
 
