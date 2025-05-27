@@ -9,7 +9,7 @@ import vibe.stream.operations;
 import vibe.stream.tls;
 
 ///
-alias GeminiServerRequestDelegate = GeminiServerResponse delegate(/*GeminiServerRequest req*/) @safe;
+alias GeminiServerRequestHandler = GeminiServerResponse delegate(GeminiServerRequest) @safe;
 
 ///
 class GeminiServerResponse
@@ -67,17 +67,17 @@ class GeminiListener
 
     TCPListener[] listeners;
 
-    this(in ServerSettings cfg) @safe
+    this(in ServerSettings cfg, GeminiServerRequestHandler geminiRequestHandler) @safe
     {
         TCPListenOptions options = TCPListenOptions.defaults;
         if(!cfg.reuseAddress) options &= ~TCPListenOptions.reuseAddress;
         if(!cfg.reusePort) options &= ~TCPListenOptions.reusePort;
 
         foreach (addr; cfg.bindAddresses)
-            listeners ~= createListener(cfg, options, addr);
+            listeners ~= createListener(cfg, options, addr, geminiRequestHandler);
     }
 
-    static TCPListener createListener(in ServerSettings serverSettings, TCPListenOptions options, string addr) @safe
+    static TCPListener createListener(in ServerSettings serverSettings, TCPListenOptions options, string addr, GeminiServerRequestHandler dg) @safe
     {
         auto tlsContext = createTLSContext(TLSContextKind.server);
         tlsContext.useCertificateChainFile(serverSettings.pkiCertFile);
@@ -85,19 +85,19 @@ class GeminiListener
 
         return listenTCP(
             serverSettings.port,
-            (TCPConnection conn) nothrow @safe => handleConnectionNoThrow(conn, serverSettings, tlsContext),
+            (TCPConnection conn) nothrow @safe => handleConnectionNoThrow(conn, serverSettings, tlsContext, dg),
             addr,
             options
         );
     }
 
-    static void handleConnectionNoThrow(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext) nothrow @safe
+    static void handleConnectionNoThrow(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext, GeminiServerRequestHandler dg) nothrow @safe
     {
         scope(exit) conn.close();
 
         assert(tlsContext, "No TLS context passed");
 
-        try handleTlsConnection(conn, serverSettings, tlsContext);
+        try handleTlsConnection(conn, serverSettings, tlsContext, dg);
         catch(Exception e)
         {
             logError("Connection handler has thrown at the peer %s: %s", conn.remoteAddress, e.msg);
@@ -108,7 +108,7 @@ class GeminiListener
         }
     }
 
-    static void handleTlsConnection(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext) @safe
+    static void handleTlsConnection(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext, GeminiServerRequestHandler dg) @safe
     {
         conn.tcpNoDelay = true;
 
@@ -124,13 +124,13 @@ class GeminiListener
 
         TLSStreamType tls_stream = createTLSStreamFL(stream, tlsContext, TLSStreamState.accepting, null, conn.remoteAddress);
 
-        handleGeminiConnection(conn, tls_stream, serverSettings);
+        handleGeminiConnection(conn, tls_stream, serverSettings, dg);
     }
 }
 
 alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
 
-private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings) @safe
+private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings, GeminiServerRequestHandler dg) @safe
 {
     string req;
 
@@ -161,7 +161,7 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
     sr.clientAddress = conn.remoteAddress;
     sr.url = URL(req);
 
-    //~ dg(sr);
+    dg(sr);
 }
 
 class GeminiServerRequest
@@ -177,9 +177,9 @@ class GeminiServerRequest
 }
 
 ///
-GeminiListener listenGemini(in ServerSettings settings, GeminiServerRequestDelegate requestDg) @safe
+GeminiListener listenGemini(in ServerSettings settings, GeminiServerRequestHandler geminiRequestHandler) @safe
 {
-    auto listener = new GeminiListener(settings);
+    auto listener = new GeminiListener(settings, geminiRequestHandler);
 
     return listener;
 }
@@ -202,7 +202,16 @@ void main()
         reusePort: true,
     );
 
-    auto listener = listenGemini(ss, () @safe => null);
+    GeminiServerResponse handler(GeminiServerRequest req) @trusted
+    {
+        import std.conv;
+
+        logTrace(req.url.to!string);
+
+        return null;
+    }
+
+    auto listener = listenGemini(ss, &handler);
     writeln("Gemini server listening");
 
     runEventLoop();
