@@ -1,5 +1,6 @@
 import std.datetime;
 import std.traits;
+import vibe.core.core: runEventLoop;
 import vibe.core.log;
 import vibe.internal.interfaceproxy;
 import vibe.stream.operations;
@@ -136,6 +137,12 @@ void main()
 {
     import std.stdio;
 
+    enum debugEnabled = true;
+    if(debugEnabled)
+        setLogLevel = LogLevel.debugV;
+    else
+        setLogLevel = LogLevel.diagnostic;
+
     const ss = new ServerSettings(
 		tlsContext: createTLSContext(TLSContextKind.server)
 	);
@@ -143,5 +150,7 @@ void main()
     //~ ss.tlsContext.usePrivateKeyFile(cfg.pkiKeyFile);
 
     auto listener = listenGemini(ss, () @safe => null);
-    //~ writeln("Edit source/app.d to start your project.");
+    writeln("Gemini server listening");
+
+    runEventLoop();
 }
