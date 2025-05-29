@@ -39,6 +39,7 @@ class GeminiServerResponse
             ///
             void writeBody(string s, string content_type)
             {
+                replyCode = ReplyCode.success;
                 mimetype = content_type;
                 body = cast(ubyte[]) s;
             }
@@ -219,26 +220,24 @@ private void writeGeminiReply(TLSStreamType stream, ref GeminiServerResponse res
     {
         case input:
             () @trusted { stream.write(res.prompt); } ();
-            stream.write("\r\n");
         break;
 
         case success:
             () @trusted { stream.write(res.mimetype); } ();
-            stream.write("\r\n");
         break;
 
         case redirect:
             () @trusted { stream.write(res.redirectUri); } ();
-            stream.write("\r\n");
         break;
 
         case tempfail:
         case permfail:
         case auth:
             () @trusted { stream.write(res.errormsg); } ();
-            stream.write("\r\n");
         break;
     }
+
+    stream.write("\r\n");
 
     if(res.replyCode == ReplyCode.success)
     {
@@ -287,11 +286,6 @@ void main()
 
     void handler(GeminiServerRequest req, ref GeminiServerResponse res) @trusted
     {
-        import std.conv;
-
-        logTrace(req.url.to!string);
-
-        res.replyCode = ReplyCode.success;
         res.writeBody(`Hello, world!`, "text/gemini");
     }
 
