@@ -215,14 +215,16 @@ private void writeGeminiReply(TLSStreamType stream, ref GeminiServerResponse res
     stream.write(" ");
 
     with(ReplyCode)
-    switch(res.replyCode)
+    final switch(res.replyCode)
     {
-        case success:
-            auto output_stream = createMemoryStream(res.body, false);
+        case input:
+            () @trusted { stream.write(res.prompt); } ();
+            stream.write("\r\n");
+        break;
 
+        case success:
             () @trusted { stream.write(res.mimetype); } ();
             stream.write("\r\n");
-            output_stream.pipe(stream);
         break;
 
         case redirect:
@@ -236,9 +238,12 @@ private void writeGeminiReply(TLSStreamType stream, ref GeminiServerResponse res
             () @trusted { stream.write(res.errormsg); } ();
             stream.write("\r\n");
         break;
+    }
 
-        default:
-            assert(false);
+    if(res.replyCode == ReplyCode.success)
+    {
+        auto output_stream = createMemoryStream(res.body, false);
+        output_stream.pipe(stream);
     }
 }
 
