@@ -4,8 +4,6 @@
 +/
 // How to run: dub run --single example.d
 
-//~ import std.datetime;
-//~ import std.traits;
 import gemini;
 import vibe.core.core: runEventLoop;
 import vibe.core.log;
