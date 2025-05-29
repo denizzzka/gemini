@@ -1,6 +1,7 @@
+module gemini;
+
 import std.datetime;
 import std.traits;
-import vibe.core.core: runEventLoop;
 import vibe.core.log;
 import vibe.core.net;
 import vibe.inet.url: URL;
@@ -274,6 +275,7 @@ private void writeGeminiReply(TLSStreamType stream, ref GeminiServerResponse res
     }
 }
 
+///
 class GeminiServerRequest
 {
     const ServerSettings* m_settings;
@@ -292,33 +294,4 @@ GeminiListener listenGemini(in ServerSettings settings, GeminiServerRequestHandl
     auto listener = new GeminiListener(settings, geminiRequestHandler);
 
     return listener;
-}
-
-void main()
-{
-    import std.stdio;
-
-    enum debugEnabled = true;
-    if(debugEnabled)
-        //~ setLogLevel = LogLevel.debugV;
-        setLogLevel = LogLevel.trace;
-    else
-        setLogLevel = LogLevel.diagnostic;
-
-    const ss = ServerSettings(
-        pkiCertFile: "cert.pem",
-        pkiPrivateKeyFile: "privkey.pem",
-        reuseAddress: true,
-        reusePort: true,
-    );
-
-    void handler(GeminiServerRequest req, ref GeminiServerResponse res) @trusted
-    {
-        res.writeBody(`Hello, world!`, "text/gemini");
-    }
-
-    auto listener = listenGemini(ss, &handler);
-    writeln("Gemini server listening");
-
-    runEventLoop();
 }
