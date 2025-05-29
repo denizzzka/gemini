@@ -84,7 +84,7 @@ struct ServerSettings
     /// Maximum number of transferred bytes per request after which the connection is closed with an error
     // Spec: URI MUST NOT exceed 1024 bytes, and a server MUST reject requests where the URI exceeds this limit
     // absolute-URI + CRLF length
-    enum ushort maxRequestSize = 1024 + "\r\n".length;
+    enum ushort maxRequestSize = 1024 + CRLF.length;
 
     ///
     string pkiCertFile;
@@ -162,14 +162,14 @@ class GeminiListener
 }
 
 alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
+immutable ubyte[2] CRLF = cast(immutable ubyte[2]) "\r\n";
 
 private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings, GeminiServerRequestHandler dg) @safe
 {
     string req;
 
     try () @trusted {
-        immutable eol = cast(immutable ubyte[]) "\r\n";
-        req = cast(string) stream.readUntil(eol, serverSettings.maxRequestSize);
+        req = cast(string) stream.readUntil(CRLF, serverSettings.maxRequestSize);
 
         //TODO: is stream empty check?
     }();
@@ -237,7 +237,7 @@ private void writeGeminiReply(TLSStreamType stream, ref GeminiServerResponse res
         break;
     }
 
-    stream.write("\r\n");
+    stream.write(CRLF);
 
     if(res.replyCode == ReplyCode.success)
     {
