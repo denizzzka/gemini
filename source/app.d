@@ -48,11 +48,17 @@ class GeminiServerResponse
         string errormsg;
     }
 
-    void writeBadRequest() @trusted
+    void writeBadRequest() @trusted nothrow
     {
         replyCode = ReplyCode.permfail;
         additionalCode = 9;
         errormsg = "Bad request";
+    }
+
+    void writeInternalError() @trusted nothrow
+    {
+        replyCode = ReplyCode.permfail;
+        errormsg = "Internal server error";
     }
 }
 
@@ -171,7 +177,7 @@ class GeminiListener
 alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
 immutable ubyte[2] CRLF = cast(immutable ubyte[2]) "\r\n";
 
-private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings, GeminiServerRequestHandler dg) @safe //TODO: nothrow?
+private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings, GeminiServerRequestHandler dg) @safe
 {
     string req;
     auto resp = new GeminiServerResponse;
@@ -210,7 +216,14 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
     sr.clientAddress = conn.remoteAddress;
     sr.url = URL(req);
 
-    dg(sr, resp);
+    try
+        dg(sr, resp);
+    catch(Exception e)
+    {
+        logError(e.msg);
+        resp.writeInternalError;
+    }
+
     stream.writeGeminiReply(resp);
 }
 
