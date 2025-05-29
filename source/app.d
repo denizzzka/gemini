@@ -195,6 +195,7 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
         }
         else
         {
+            // Malformed Gemini request: too huge or CRLF not found
             resp.writeBadRequest;
             () @trusted { logTrace(resp.errormsg); }();
 
