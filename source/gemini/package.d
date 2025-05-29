@@ -190,13 +190,8 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
     }();
     catch(Exception e)
     {
-        //TODO: check SSL code, not error message
-        import std.algorithm.searching;
-
-        // Tested on OpenSSL only
-        if(e.msg.canFind(`11 (Resource temporarily unavailable)`))
+        if(conn.empty)
         {
-            //TODO: move to handleTlsConnection?
             logTrace("Socket closed by remote peer");
             return;
         }
