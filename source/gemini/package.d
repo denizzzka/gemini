@@ -11,7 +11,7 @@ import vibe.stream.operations;
 import vibe.stream.tls;
 
 ///
-alias GeminiServerRequestHandler = void delegate(GeminiServerRequest, ref GeminiServerResponse) @safe;
+alias GeminiServerRequestDelegate = void delegate(GeminiServerRequest, ref GeminiServerResponse) @safe;
 
 ///
 enum ReplyCode : ubyte
@@ -115,7 +115,7 @@ class GeminiListener
 
     TCPListener[] listeners;
 
-    this(in ServerSettings cfg, GeminiServerRequestHandler geminiRequestHandler) @safe
+    this(in ServerSettings cfg, GeminiServerRequestDelegate geminiRequestHandler) @safe
     {
         TCPListenOptions options = TCPListenOptions.defaults;
         if(!cfg.reuseAddress) options &= ~TCPListenOptions.reuseAddress;
@@ -125,7 +125,7 @@ class GeminiListener
             listeners ~= createListener(cfg, options, addr, geminiRequestHandler);
     }
 
-    static TCPListener createListener(in ServerSettings serverSettings, TCPListenOptions options, string addr, GeminiServerRequestHandler dg) @safe
+    static TCPListener createListener(in ServerSettings serverSettings, TCPListenOptions options, string addr, GeminiServerRequestDelegate dg) @safe
     {
         auto tlsContext = createTLSContext(TLSContextKind.server);
         tlsContext.useCertificateChainFile(serverSettings.pkiCertFile);
@@ -139,7 +139,7 @@ class GeminiListener
         );
     }
 
-    static void handleConnectionNoThrow(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext, GeminiServerRequestHandler dg) nothrow @safe
+    static void handleConnectionNoThrow(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext, GeminiServerRequestDelegate dg) nothrow @safe
     {
         scope(exit) conn.close();
 
@@ -156,7 +156,7 @@ class GeminiListener
         }
     }
 
-    static void handleTlsConnection(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext, GeminiServerRequestHandler dg) @safe
+    static void handleTlsConnection(TCPConnection conn, in ServerSettings serverSettings, TLSContext tlsContext, GeminiServerRequestDelegate dg) @safe
     {
         conn.tcpNoDelay = true;
 
@@ -179,7 +179,7 @@ class GeminiListener
 alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
 immutable ubyte[2] CRLF = cast(immutable ubyte[2]) "\r\n";
 
-private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings, GeminiServerRequestHandler dg) @safe
+private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings, GeminiServerRequestDelegate dg) @safe
 {
     string req;
     auto resp = new GeminiServerResponse;
@@ -284,7 +284,7 @@ class GeminiServerRequest
 }
 
 ///
-GeminiListener listenGemini(in ServerSettings settings, GeminiServerRequestHandler geminiRequestHandler) @safe
+GeminiListener listenGemini(in ServerSettings settings, GeminiServerRequestDelegate geminiRequestHandler) @safe
 {
     auto listener = new GeminiListener(settings, geminiRequestHandler);
 
