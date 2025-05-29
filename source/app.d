@@ -31,7 +31,7 @@ class GeminiServerResponse
     union
     {
         string prompt;
-        union
+        struct
         {
             string mimetype;
             ubyte[] body;
@@ -195,6 +195,19 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
 
     auto resp = new GeminiServerResponse;
     dg(sr, resp);
+
+    //~ import vibe.stream.memory;
+    import std.conv: to;
+
+    //~ auto output_stream = createMemoryStream(resp.body, false);
+    //~ output_stream.pipe(stream);
+    stream.write((cast(ubyte)resp.replyCode).to!string);
+    stream.write((cast(ubyte)resp.additionalCode).to!string);
+    stream.write(" ");
+    () @trusted { stream.write(resp.mimetype); } ();
+    stream.write("\r\n");
+    stream.write(resp.body);
+    stream.flush();
 }
 
 class GeminiServerRequest
