@@ -1,6 +1,7 @@
 module gemini;
 
 import std.datetime;
+import std.exception: enforce;
 import std.traits;
 import vibe.core.log;
 import vibe.core.net;
@@ -185,8 +186,7 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
 
     try () @trusted {
         req = cast(string) stream.readUntil(CRLF, serverSettings.maxRequestSize);
-
-        //TODO: is stream empty check?
+        enforce(!stream.dataAvailableForRead, "Protocol violation: stream contains something after CRLF");
     }();
     catch(Exception e)
     {
