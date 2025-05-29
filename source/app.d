@@ -47,6 +47,13 @@ class GeminiServerResponse
         string redirectUri;
         string errormsg;
     }
+
+    void writeBadRequest() @trusted
+    {
+        replyCode = ReplyCode.permfail;
+        additionalCode = 9;
+        errormsg = "Bad request";
+    }
 }
 
 ///
@@ -164,9 +171,10 @@ class GeminiListener
 alias TLSStreamType = ReturnType!(createTLSStreamFL!(InterfaceProxy!Stream));
 immutable ubyte[2] CRLF = cast(immutable ubyte[2]) "\r\n";
 
-private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings, GeminiServerRequestHandler dg) @safe
+private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in ServerSettings serverSettings, GeminiServerRequestHandler dg) @safe //TODO: nothrow?
 {
     string req;
+    auto resp = new GeminiServerResponse;
 
     try () @trusted {
         req = cast(string) stream.readUntil(CRLF, serverSettings.maxRequestSize);
@@ -181,11 +189,18 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
         // Tested on OpenSSL only
         if(e.msg.canFind(`11 (Resource temporarily unavailable)`))
         {
+            //TODO: move to handleTlsConnection?
             logTrace("Socket closed by remote peer");
             return;
         }
         else
-            throw e;
+        {
+            resp.writeBadRequest;
+            () @trusted { logTrace(resp.errormsg); }();
+
+            stream.writeGeminiReply(resp);
+            return;
+        }
     }
 
     logTrace("Request: %s", req);
@@ -194,7 +209,6 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
     sr.clientAddress = conn.remoteAddress;
     sr.url = URL(req);
 
-    auto resp = new GeminiServerResponse;
     dg(sr, resp);
     stream.writeGeminiReply(resp);
 }
