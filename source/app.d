@@ -195,18 +195,51 @@ private void handleGeminiConnection(TCPConnection conn, TLSStreamType stream, in
 
     auto resp = new GeminiServerResponse;
     dg(sr, resp);
+    stream.writeGeminiReply(resp);
+}
 
-    import vibe.stream.memory;
+private string str(ubyte v) nothrow @safe
+{
     import std.conv: to;
 
-    auto output_stream = createMemoryStream(resp.body, false);
-    stream.write((cast(ubyte)resp.replyCode).to!string);
-    stream.write((cast(ubyte)resp.additionalCode).to!string);
+    return v.to!string;
+}
+
+private void writeGeminiReply(TLSStreamType stream, ref GeminiServerResponse res) @safe
+{
+    import std.conv: to;
+    import vibe.stream.memory;
+
+    stream.write(res.replyCode.str);
+    stream.write(res.additionalCode.str);
     stream.write(" ");
-    () @trusted { stream.write(resp.mimetype); } ();
-    stream.write("\r\n");
-    output_stream.pipe(stream);
-    stream.flush();
+
+    with(ReplyCode)
+    switch(res.replyCode)
+    {
+        case success:
+            auto output_stream = createMemoryStream(res.body, false);
+
+            () @trusted { stream.write(res.mimetype); } ();
+            stream.write("\r\n");
+            output_stream.pipe(stream);
+        break;
+
+        case redirect:
+            () @trusted { stream.write(res.redirectUri); } ();
+            stream.write("\r\n");
+        break;
+
+        case tempfail:
+        case permfail:
+        case auth:
+            () @trusted { stream.write(res.errormsg); } ();
+            stream.write("\r\n");
+        break;
+
+        default:
+            assert(false);
+    }
 }
 
 class GeminiServerRequest
